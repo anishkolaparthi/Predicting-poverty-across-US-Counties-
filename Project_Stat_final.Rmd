@@ -1,0 +1,496 @@
+---
+title: "Project_STAT_Final"
+output:
+  word_document: default
+  pdf_document: default
+date: "2024-04-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load the dataset
+county <- read.csv("county.csv", h = T)
+
+#Essential libraries
+library(ggplot2)
+library(gridExtra)
+library(rpart)
+library(Hmisc)
+library(usmap)
+library(maps)
+library(mapproj)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(caret)
+
+# View the first few rows of the dataset
+head(county)
+
+# Summary statistics for numeric variables
+summary(county)
+
+# Structure of the dataset
+str(county)
+
+#Now calculate missing values
+county <- na.omit(county)
+
+#Scatter plot of poverty VS median_hh_income
+ggplot(county, aes(y=poverty, x=median_hh_income))+geom_boxplot()
+
+#In this boxplot without log transformation, the relationship between median_hh_income and poverty appears to be nonlinear and skewed due to the wide range of poverty percentages.
+
+#Use log for better result
+ggplot(county, aes(y=log(poverty), x=median_hh_income))+geom_boxplot()
+
+#This plot provides a clearer understanding of how changes in median_hh_income relate to changes in the percentage of the population in poverty, especially for lower income counties where poverty rates are typically higher
+```
+
+
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(maps)
+
+# Get state data and arrests data
+state <- map_data("county") 
+poverty <- county  # Assuming "county" contains the poverty data
+poverty <- poverty[, c("state", "poverty")]  # Selecting only the "state" and "poverty" columns
+
+# Adjust case for matching 
+poverty$region <- tolower(poverty$state)
+names(state) <- tolower(names(state))
+
+# Merge and sort (plots in order, sort ensures states filled in)
+poverty.geo <- merge(state, poverty, sort = FALSE, by = "region")
+poverty.geo <- poverty.geo[order(poverty.geo$order), ]
+
+# Plot
+ggplot(poverty.geo, aes(long, lat)) +
+  geom_polygon(aes(group = group, fill = poverty)) +
+  geom_text(data = poverty.geo %>% group_by(region) %>% summarize(long = mean(long), lat = mean(lat)), 
+            aes(label = substr(region, 1, 2)), size = 3, color = "black", fontface = "bold") +  # Add state abbreviations
+  coord_map() +
+  labs(title = "Poverty Rate by State") +
+  scale_fill_viridis_c(name = "Poverty Rate") +
+  theme_minimal()
+
+
+```
+
+
+```{r}
+#Correlation between unemployment rate and median household income
+correlation <- cor(county$unemployment_rate, county$median_hh_income)
+correlation
+#A negative correlation implies that as unemployment rate increases, the median HH income tends to decrease.
+
+ggplot(county, aes(x = log(unemployment_rate), y = log(median_hh_income))) +
+  geom_point(color = "blue") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "Unemployment Rate vs. Median Household Income",
+       x = "Unemployment Rate", y = "Median Household Income") +
+  theme_minimal()
+#This implies that unemployment rate increases, then median HH income decreases.
+
+```
+
+```{r}
+
+# Homeownership rate comparison between metropolitan and non-metropolitan areas
+ggplot(county, aes(x = factor(metro), y = homeownership, fill = metro)) +
+  geom_boxplot() +
+  labs(title = "Comparison of Homeownership Rate in Metropolitan vs. Non-Metropolitan Areas",
+       x = "Metropolitan Area", y = "Homeownership Rate", fill = "Metropolitan Area") +
+  theme_minimal()
+
+#The median line is lower for metropolitan areas, it suggests that, on average,non-metropolitan areas have higher homeownership rates.
+
+
+```
+```{r}
+# Plotting
+
+# Example: Scatter plot of per capita income vs. median household income
+plot(county$per_capita_income, county$median_hh_income, 
+     xlab = "Per Capita Income", ylab = "Median Household Income",
+     main = "Per Capita Income vs. Median Household Income")
+#Each point represents a county, and its position on the plot corresponds to its per capita income and median household income. Here, counties with higher per capita income also tend to have higher median household income.
+```
+
+
+```{r}
+# Calculate the average population change from 2010 to 2017
+avg_pop_change <- mean(county$pop_change, na.rm = TRUE)
+avg_pop_change
+#From 2010 to 2017 the average change in population is 58.4%
+
+# Convert 'poverty' variable to numeric
+county$poverty <- as.numeric(as.character(county$poverty))
+
+# Filter counties with poverty rate greater than 20%
+high_poverty_counties <- county %>% filter(poverty > 12)
+
+#If poverty rate greater than 12% and assigns them to the variable high_poverty_counties
+
+
+```
+```{r}
+t1 <- lm( log(poverty) ~ metro, data = county)
+summary(t1)
+
+t2 <- lm( log(poverty) ~ median_edu, data = county)
+summary(t2)
+
+t3 <- lm( log(poverty) ~ median_hh_income, data = county)
+summary(t3)
+
+t4 <- lm( log(poverty) ~ unemployment_rate, data = county)
+summary(t4)
+
+t5 <- lm( log(poverty) ~ pop_change, data = county)
+summary(t5)
+
+t6 <- lm( log(poverty) ~ homeownership, data = county)
+summary(t6)
+
+t7 <- lm( log(poverty) ~ multi_unit, data = county)
+summary(t7)
+```
+```{r}
+# Load necessary libraries
+library(ggplot2)
+
+# Fit linear regression models
+t1 <- lm(log(poverty) ~ metro, data = county)
+t2 <- lm(log(poverty) ~ median_edu, data = county)
+t3 <- lm(log(poverty) ~ median_hh_income, data = county)
+t4 <- lm(log(poverty) ~ unemployment_rate, data = county)
+t5 <- lm(log(poverty) ~ pop_change, data = county)
+t6 <- lm(log(poverty) ~ homeownership, data = county)
+t7 <- lm(log(poverty) ~ multi_unit, data = county)
+t8<-lm(log(poverty)~ per_capita_income, data=county)
+
+
+# Extract coefficients from the models
+coefficients <- c(summary(t1)$coef[2, "Estimate"],
+                  summary(t2)$coef[2, "Estimate"],
+                  summary(t3)$coef[2, "Estimate"],
+                  summary(t4)$coef[2, "Estimate"],
+                  summary(t5)$coef[2, "Estimate"],
+                  summary(t6)$coef[2, "Estimate"],
+                  summary(t7)$coef[2, "Estimate"],
+                  summary(t8)$coef[2, "Estimate"])
+
+# Names of the variables
+variable_names <- c("Metro", "Median Education", "Median Household Income", "Unemployment Rate",
+                    "Population Change", "Homeownership", "Multi-unit", "Per Capita Income")
+
+# Create a data frame for visualization
+impact_data <- data.frame(variable = variable_names, coefficient = coefficients)
+
+# Calculate percentage of impact for each variable
+impact_data$percentage <- impact_data$coefficient / sum(impact_data$coefficient) * 100
+# Define custom colors
+custom_colors <- c("pink", "skyblue", "grey", "yellow", "orange","red", "blue","purple")
+
+# Plot pie chart with custom colors
+ggplot(impact_data, aes(x = "", y = percentage, fill = variable)) +
+  geom_bar(stat = "identity") +
+  coord_polar("y", start = 0) +
+  labs(title = "Impact of Variables on log(Poverty)",
+       fill = "Variable") +
+  theme_minimal() +
+  theme(legend.position = "right") +
+  scale_fill_manual(values = custom_colors)
+
+```
+
+
+```{r}
+# Create a new plotting area with 2 rows and 3 columns
+par(mfrow=c(2, 3))
+
+# Histogram of log(poverty)
+hist(log(county$poverty), probability = TRUE, main = "Log Poverty", xlab = "Log Poverty")
+
+# Histogram of median household income with log transformation
+hist(log(county$median_hh_income), probability = TRUE, main = "Median HH Income (log)", xlab = "Log Median HH Income")
+
+# Histogram of unemployment rate with log transformation
+hist(log(county$unemployment_rate), probability = TRUE, main = "Unemployment Rate (log)", xlab = "Log Unemployment Rate")
+
+# Histogram of population change with log transformation
+hist(log(county$pop_change), probability = TRUE, main = "Population Change (log)", xlab = "Log Population Change")
+
+# Histogram of homeownership with log transformation
+hist(log(county$homeownership), probability = TRUE, main = "Homeownership (log)", xlab = "Log Homeownership")
+
+# Histogram of per capita income with log transformation
+hist(log(county$per_capita_income), probability = TRUE, main = "Per Capita Income (log)", xlab = "Log Per Capita Income")
+
+# Reset the plotting area
+par(mfrow=c(1, 1))
+
+
+```
+
+
+```{r}
+
+# Example: Bar plot of unemployment rate by state
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Calculate average unemployment rate by state
+unemployment_by_state <- county %>% 
+  group_by(state) %>% 
+  summarize(avg_unemployment_rate = mean(unemployment_rate, na.rm = TRUE))
+
+# Plot the bar plot
+ggplot(unemployment_by_state, aes(x = state, y = avg_unemployment_rate)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Average Unemployment Rate by State",
+       x = "State",
+       y = "Average Unemployment Rate") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))  # Rotate x-axis labels for better readability
+```
+```{r}
+
+# Load necessary libraries
+library(ggplot2)
+library(maps)
+
+# Check if the 'unemployment' variable is present in the 'unemployment.geo' data frame
+# "unemployment" %in% names(unemployment.geo)
+
+# Get state data and unemployment data
+state <- map_data("county") 
+unemployment <- county 
+unemployment <- unemployment[, c("state", "unemployment_rate")]  
+
+# Adjust case for matching 
+unemployment$region <- tolower(unemployment$state)
+names(state) <- tolower(names(state))
+
+# Merge and sort (plots in order, sort ensures states filled in)
+unemployment.geo <- merge(state, unemployment, sort = FALSE, by = "region")
+unemployment.geo <- unemployment.geo[order(unemployment.geo$order), ]
+
+# Plot
+ggplot(unemployment.geo, aes(long, lat)) +
+  geom_polygon(aes(group = group, fill = unemployment_rate)) +
+  geom_text(data = unemployment.geo %>% group_by(region) %>% summarize(long = mean(long), lat = mean(lat)), 
+            aes(label = substr(region, 1, 2)), size = 3, color = "black", fontface = "bold") +  # Add state abbreviations
+  coord_map() +
+  labs(title = "Unemployment Rate by State") +
+  scale_fill_viridis_c(name = "Unemployment Rate") +
+  theme_minimal()
+
+#As the shade gets lighter the poverty rate of that state increases. And as the shade gets darker the poverty rate in that state is low.
+```
+
+
+#Research Questions
+#1. Variability of poverty rate across different states
+#2. What is the Correlation between unemployment rate and state?
+#3. What is the relationship between level of per capita income and median_hh_income?
+#4. Compare the homeownership rate between metropolitan and non-metropolitan areas
+#5. What is the average population change from 2010 to 2017?
+
+```{r}
+# Interaction between variables
+model_lm_1 <- lm( log(poverty)~median_edu , data = county)
+model_lm_1
+#here 71.428%---->((3.6-2.1)/2.1) of population is having more poverty rate as compared to bachelors. Bachelors are having less poverty rate compared to below_hs, hs_diploma and some_college
+summary(model_lm_1)
+anova(model_lm_1)
+#MSE=0.130, R2_adj=0.2398
+
+model_lm_2 <- lm( log(poverty)~median_edu+median_hh_income , data = county)
+model_lm_2
+summary(model_lm_2)
+anova(model_lm_2)
+#MSE=0.058, R2_adj=0.6604
+
+model_lm_3 <- lm( log(poverty)~median_edu + median_hh_income + unemployment_rate , data = county)
+model_lm_3
+summary(model_lm_3)
+anova(model_lm_3)
+#MSE=0.051, R2_adj=0.6999
+
+model_lm_4 <- lm( log(poverty)~median_edu + median_hh_income + unemployment_rate + metro , data = county)
+model_lm_4
+summary(model_lm_4)
+anova(model_lm_4)
+#MSE=0.049, R2_adj=0.7171
+
+model_lm_5<-lm(log(poverty)~median_edu + median_hh_income + unemployment_rate + metro + per_capita_income, data = county)
+model_lm_5
+summary(model_lm_5)
+anova(model_lm_5)
+
+ggplot(county, aes(x=median_edu, y=poverty, color=metro))+geom_boxplot()
+
+
+R2_adjusted<-c(0.2398,0.6604,0.6999, 0.7171, 0.7281 )
+R2_adjusted
+MSE<-c(0.130,0.058,0.051,0.049,0.047)
+MSE
+#From above all 4 models, MSE has been decreasing and R2_adj is increasing for addition of variables.
+
+#As we move from Model_lm_1 to Model_lm_4, we see improvements in both MSE and Adjusted R-squared values, indicating better predictive performance and explanatory power
+```
+# Logistic regression models are evaluated based on metrics such as accuracy, precision, recall, and ROC curves, which are suitable for binary classification tasks.Multiple linear regression models are evaluated based on metrics such as MSE and R-squared, which are more appropriate for numerical outcomes.
+
+# Here we dont have continuous outcomes thats why we converted the data into binary and we used logistics regression for more accuracy.
+
+```{r}
+#Add poverty_high variable to the dataset
+# Load the dataset
+data(county)
+
+# Preprocess the data
+# Remove NA values
+county <- na.omit(county)
+
+# Convert poverty into a binary variable
+county$poverty_high <- ifelse(county$poverty > median(county$poverty), 1, 0)
+
+# Encode states as factors
+county$state <- as.factor(county$state)
+
+# Perform logistic regression
+model <- glm(poverty_high ~ median_edu + median_hh_income + unemployment_rate + metro+ per_capita_income, data = county, family = "binomial")
+
+# Interpret the results
+summary(model)
+
+View(county)
+```
+#We ran a logistic regression model to predict whether a county has a high poverty rate based on several predictors: median_edu,median_hh_income, unemployment_rate, and whether the county is metropolitan (metro)
+
+# The model shows that higher education and higher household incomes gives lower odds of poverty rate. Also presence of metropolitan area appears to be associated with lower odds of high poverty.
+
+#This suggests that efforts to improve education, increase household incomes, and address unemployment could contribute to reducing high poverty rates in counties.
+
+
+
+```{r}
+#Prediction Accuracy Using Confusion matrix
+# Load required libraries
+library(dplyr)
+library(tidyr)
+library(caret)
+
+# Load the dataset
+data(county)
+n<-dim(county)
+n
+
+# Preprocess the data
+# Remove NA values
+county <- na.omit(county)
+
+# Convert poverty into a binary variable
+county$poverty_high <- ifelse(county$poverty > median(county$poverty), 1, 0)
+
+# Encode states as factors
+county$state <- as.factor(county$state)
+
+
+N<-dim(county)
+N
+set.seed(123)
+train_index<-sample(1:2560, 0.8*2560)
+train_data<-county[train_index,]
+test_data<-county[-train_index,]
+# Perform logistic regression
+model <- glm(poverty_high ~ median_edu + median_hh_income + unemployment_rate + metro+per_capita_income, data = train_data, family = "binomial")
+
+# Make predictions on testing data
+predictions <- ifelse(predict(model, newdata = test_data, type = "response") > 0.6, 1, 0)
+
+# Create confusion matrix
+confusion_matrix <- table(Actual = test_data$poverty_high, Predicted = predictions)
+confusion_matrix
+
+# Calculate accuracy
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+accuracy
+
+
+# Using class technique
+prob1<-stats::predict(model, newdata=test_data)#  this will result in log odds ratio
+prob1<-stats::predict(model, newdata=test_data, type="response") 
+# `type=response` provides predicted probability 
+
+
+pred1<- rep(0,dim(test_data)[1]) ## create a zero vector, there are 2048 rows  in the training set
+
+pred1[prob1>0.6]=1 
+tab1<-table(pred1, test_data$poverty_high) # confusion matrix
+addmargins(tab1)
+ sum(diag(tab1))/sum(tab1)
+
+```
+
+#The logistic regression model trained on the dataset achieved an overall accuracy of approximately 82.42% in predicting whether a county has a high poverty rate.
+
+```{r}
+plot_confusion_matrix <- function(model, test_data, lower_prob = 0.1, upper_prob = 1, threshold_step = 0.1) {
+  # Initialize empty lists to store results
+  accuracy_values <- c()
+  thresholds <- seq(lower_prob, upper_prob, by = threshold_step)
+  
+  # Iterate over different probability thresholds
+  for (threshold in thresholds) {
+    # Predict outcomes using the given threshold
+    predictions <- ifelse(predict(model, newdata = test_data, type = "response") > threshold, 1, 0)
+    
+    # Create confusion matrix
+    confusion_matrix <- table(Actual = test_data$poverty_high, Predicted = predictions)
+    
+    # Calculate accuracy and store in list
+    accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+    accuracy_values <- c(accuracy_values, accuracy)
+  }
+  
+  # Plot accuracy versus probability thresholds
+  plot(thresholds, accuracy_values, type = "l", 
+       xlab = "Probability Threshold", ylab = "Accuracy", 
+       main = "Accuracy vs. Probability Threshold")
+}
+
+plot_confusion_matrix(model, test_data, lower_prob = 0.1, upper_prob = 1, threshold_step = 0.1)
+
+
+```
+
+```{r}
+# Load necessary libraries
+library(tidyverse)
+
+# Load the dataset
+data(county)
+
+# Fit gamma regression model
+gamma_model <- glm(poverty ~  median_edu + median_hh_income + unemployment_rate + metro+per_capita_income , data = county, family = "Gamma")
+
+# Summarize the model
+summary(gamma_model)
+anova(gamma_model)
+
+```
+
+
+
+
+
